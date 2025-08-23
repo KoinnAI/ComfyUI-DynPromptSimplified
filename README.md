@@ -1,5 +1,5 @@
 
-# ComfyUI-DynPromptSimplified
+# ComfyUI Dynamic Prompting Simplified
 
 A minimal **dynamic prompting + mirrored wildcards** node for ComfyUI.
 
