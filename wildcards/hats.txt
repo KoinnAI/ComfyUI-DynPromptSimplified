@@ -1,0 +1,1 @@
+{red hat|blue hat|green hat}

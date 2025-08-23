@@ -1,0 +1,170 @@
+{
+  "last_node_id": 6,
+  "last_link_id": 0,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "Load Checkpoint",
+      "pos": [
+        80,
+        120
+      ],
+      "inputs": {
+        "ckpt_name": [
+          "STRING",
+          "model.safetensors"
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "type": "DynPrompt Expand (mirrored wildcards)",
+      "pos": [
+        80,
+        240
+      ],
+      "inputs": {
+        "text": [
+          "STRING",
+          "portrait wearing __hats-mir__"
+        ],
+        "negative": [
+          "STRING",
+          ""
+        ],
+        "seed": [
+          "INT",
+          12345
+        ],
+        "wildcard_dir": [
+          "STRING",
+          ""
+        ],
+        "auto_neg_from_mir": [
+          "BOOLEAN",
+          true
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "type": "CLIP Text Encode",
+      "pos": [
+        420,
+        200
+      ],
+      "inputs": {
+        "clip": [
+          "CLIP",
+          1,
+          1
+        ],
+        "text": [
+          "STRING",
+          2,
+          0
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "type": "CLIP Text Encode",
+      "pos": [
+        420,
+        300
+      ],
+      "inputs": {
+        "clip": [
+          "CLIP",
+          1,
+          1
+        ],
+        "text": [
+          "STRING",
+          2,
+          1
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "type": "KSampler",
+      "pos": [
+        720,
+        220
+      ],
+      "inputs": {
+        "model": [
+          "MODEL",
+          1,
+          0
+        ],
+        "seed": [
+          "INT",
+          12345
+        ],
+        "steps": [
+          "INT",
+          20
+        ],
+        "cfg": [
+          "FLOAT",
+          4.5
+        ],
+        "sampler_name": [
+          "STRING",
+          "euler"
+        ],
+        "scheduler": [
+          "STRING",
+          "normal"
+        ],
+        "denoise": [
+          "FLOAT",
+          1.0
+        ],
+        "positive": [
+          "CONDITIONING",
+          3,
+          0
+        ],
+        "negative": [
+          "CONDITIONING",
+          4,
+          0
+        ],
+        "latent_image": [
+          "LATENT",
+          [
+            "EmptyLatentImage",
+            {
+              "width": 768,
+              "height": 1024,
+              "batch_size": 1
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "type": "VAE Decode",
+      "pos": [
+        980,
+        220
+      ],
+      "inputs": {
+        "samples": [
+          "LATENT",
+          5,
+          0
+        ],
+        "vae": [
+          "VAE",
+          1,
+          2
+        ]
+      }
+    }
+  ]
+}
