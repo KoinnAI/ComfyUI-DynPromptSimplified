@@ -20,7 +20,14 @@ A minimal **dynamic prompting + mirrored wildcards** node for ComfyUI.
 - Inputs: `text`, `negative`, `seed`, `wildcard_dir`, `auto_neg_from_mir`
 - Outputs: expanded `text`, expanded `negative`
 
-Wire the outputs into your usual `CLIP Text Encode` → `KSampler` chain.
+## Usage
+- positive: positive prompt
+- negative: negative prompt
+- Seed: this is used to determine how the node will select tags
+- allow neg from mir: automatically adds -mir tags to negative prompt without explicitly needing to add it to the negative prompt
+<br>
+Wire the outputs into your usual `CLIP Text Encode` node <br>
+You can preview what the output is with the "preview any" node in utils
 
 ## Examples
 Wildcards:
