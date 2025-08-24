@@ -3,7 +3,7 @@
 
 A minimal **dynamic prompting + mirrored wildcards** node for ComfyUI.
 
-## Features
+## Overview
 - `{a|b|{c|d}}` nested choice expansion (deterministic by seed).
 - `__name__` loads `wildcards/name.txt`.
 - `__name-mir__` strictly loads `wildcards/name-mir.txt`.
@@ -25,6 +25,7 @@ A minimal **dynamic prompting + mirrored wildcards** node for ComfyUI.
 - negative: negative prompt
 - Seed: this is used to determine how the node will select tags
 - allow neg from mir: automatically adds -mir tags to negative prompt without explicitly needing to add it to the negative prompt
+- variety: int between 0-10; creates extra randomness 'lanes' [Variety](#-variety-extra-randomness-lanes)
 <br>
 Wire the outputs into your usual `CLIP Text Encode` node <br>
 You can preview what the output is with the "preview any" node in utils
@@ -109,6 +110,28 @@ Behavior:
 - With the checkbox enabled, the extension auto-injects `__hats-mir__` into the **negative** and expands it there as the comma‑separated “other” options.
 - If the seed picks **`red hat`** for positive, the negative gets **`blue hat, green hat`** automatically.
 
+## 🎲 Variety (extra randomness lanes)
+
+**What it is:** An integer knob that creates alternate, reproducible randomness *lanes* without changing your seed or prompt.
+
+**Deterministic:** With the same `(seed, variety, prompt, files)`, you get the same positive & negative outputs every time.
+
+**Independence from fixed text:** Only decision points advance randomness—each `{…}` block and each `__wildcard__` / `__*-mir__`. Fixed words/commas/spaces do **not** affect picks.
+
+**How it works (under the hood):**
+- Choices use `choice#0, choice#1, …`
+- Wildcards use `wild#0, wild#1, …` (also salted with the token name)
+- We hash `(seed, counter[, token], variety)` to pick an index.
+
+**When to use:** Keep `seed` fixed and sweep `variety = 0,1,2…` to explore different, reproducible variants from the same prompt.
+
+**Example**
+```text
+Prompt: __color__, {A|B|{C|D}}, __pose-mir__
+
+(seed=123, variety=0) → picks one set of branches
+(seed=123, variety=1) → different set of branches (still reproducible)
+
 ## ⚙️ Usage
 
 - Write prompts as usual with `{}` and `__wildcards__`.
@@ -126,5 +149,33 @@ Negative: lowres, bad anatomy, __hats-mir__
 - Choice/wildcard expansion is capped to prevent runaway recursion.
 - If `negative` is blank and `auto_neg_from_mir` is ON, the node scans the positive for `__tokens__`
   and auto-builds a mirrored negative when possible.
+
+## Changelog
+### 2025-08-24 — Counter-Based Randomness & “Variety” lanes
+**Why**: fixed tokens could cause prompt to converge.
+
+**What changed**
+- **Decision-only RNG**: Random choices now depend **only** on decision points (each `{…}` block and each `__wildcard__` / `__*-mir__` call), not on surrounding fixed text.  
+  - Internally we hash `(seed, decision_counter[, token], variety)` where counters advance as we hit choices/wildcards left→right.
+  - Adding/removing fixed words, commas, or spacing no longer shifts picks.
+- **Deterministic lanes via `variety`**: New integer input that adds an extra salt.  
+  - Same `(seed, variety, prompt, files)` ⇒ same outputs.  
+  - Sweep `variety = 0,1,2…` to get reproducible alternates without touching seed or prompt.
+- **Deep mirroring (strict)**: `__foo-mir__` contributes mirrored exclusions to Negative even when **nested** inside other wildcards, and **only** reads `foo-mir.txt` (never falls back).
+- **Empty-branch support in `*-mir.txt`**: `{option|}` is honored.  
+  - If Positive picks `option`, Negative adds nothing for that token; if Positive picks the empty branch, Negative adds the non-empty options.
+- **Single-line `*-mir.txt` with nested braces**: `{1|2|{3|4}}` is flattened to leaves so mirroring can compute “all-except-chosen” correctly.
+
+**Behavior notes**
+- Fixed text no longer influences randomness. Only the **number/order** of decision points matters.  
+- Changing decision points (e.g., adding a `{…}` or another `__wildcard__`) will change the sequence of draws—as expected.  
+- Deep mirror uses the same counters as Positive, ensuring the Negative always gets the correct complement.
+
+**Example**
+```text
+Prompt: __color__, {A|B|{C|D}}, __pose-mir__
+Same seed, same variety → same picks (pos & neg)
+Change only fixed words → picks stay identical
+Bump variety (e.g., 0→1) → different, reproducible picks
 
 License: GPLv3 (same as the original)
