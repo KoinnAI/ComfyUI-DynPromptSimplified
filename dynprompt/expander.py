@@ -115,7 +115,7 @@ def _stable_pick_index(seed: int, salt: str, n: int) -> int:
 
 class PromptExpander:
     """
-    Expands deterministically by seed:
+    Expands deterministically by seed and counter-based salts:
 
       1) {a|b|{c|d}|}  --> brace choices (empty branch allowed)
       2) __token__     --> wildcards from <wildcard_dir>/token.txt
@@ -127,16 +127,45 @@ class PromptExpander:
       - phase="pos": pick-one for wildcards (normal)
       - phase="neg": join all except chosen (used for mirroring)
         (empty options are ignored when joining, so they don't add commas)
+
+    Counter-based randomness:
+      - Fixed text has no effect on picks.
+      - Choices use an incrementing choice counter (choice#0, choice#1, ...).
+      - Wildcards use an incrementing wild counter (wild#0, wild#1, ...), salted with token.
+      - Optional 'variety' integer allows multiple deterministic lanes per seed.
     """
 
-    def __init__(self, seed: int, wildcard_dir: Optional[str] = None):
+    def __init__(self, seed: int, wildcard_dir: Optional[str] = None, variety: int = 0):
         self.seed = int(seed) if seed is not None else 0
         self.wildcard_dir = wildcard_dir or ""
+        self.variety = int(variety) if variety else 0
+        self._salt_extra = f":v{self.variety}" if self.variety else ""
+        # runtime counters (reset per expand)
+        self._choice_counter = 0
+        self._wild_counter = 0
+
+    # -------------------- Counter RNG helpers --------------------
+
+    def _reset_counters(self):
+        self._choice_counter = 0
+        self._wild_counter = 0
+
+    def _pick_choice_index(self, n: int) -> int:
+        idx = _stable_pick_index(self.seed, f"choice#{self._choice_counter}{self._salt_extra}", n)
+        self._choice_counter += 1
+        return idx
+
+    def _pick_wild_index(self, token: str, n: int) -> int:
+        idx = _stable_pick_index(self.seed, f"wild#{self._wild_counter}:{token}{self._salt_extra}", n)
+        self._wild_counter += 1
+        return idx
 
     # -------------------- Public helpers --------------------
 
     def collapse_choices(self, text: str) -> str:
         """Deterministically collapse all {a|b|{c|d}|} blocks. No wildcard expansion."""
+        # Ensure counters match the main expand order if used standalone
+        self._reset_counters()
         return self._expand_choices_recursively(text or "")
 
     def read_options_for_token(self, token: str) -> List[str]:
@@ -154,7 +183,6 @@ class PromptExpander:
               - For non-mir tokens: split by TOP-LEVEL '|' into options
                                     (empty branches kept as '').
         """
-        # Resolve and read file raw (without any brace splitting)
         path = self._normalize_token_to_path(token)
         if not path:
             return []
@@ -182,7 +210,6 @@ class PromptExpander:
                     return _dedup_preserve(_flatten_brace_expr(line))
                 else:
                     # Non-mir: choose among top-level alts (empties allowed)
-                    # e.g., "{red|blue| |green}" -> ["red","blue","","green"]
                     m = re.fullmatch(r"\{(.*)\}", line)
                     if m:
                         return _split_top_level_alts(m.group(1))
@@ -195,7 +222,7 @@ class PromptExpander:
         # are collapsed later by the brace pass).
         return raw
 
-    # -------------------- IO & parsing ----------------------
+    # -------------------- IO & path safety ----------------------
 
     def _normalize_token_to_path(self, token: str) -> Optional[str]:
         if not self.wildcard_dir:
@@ -221,7 +248,7 @@ class PromptExpander:
         if not options:
             # Leave unchanged on malformed {}
             return s
-        idx = _stable_pick_index(self.seed, f"choice:{s}:{start}-{end}", len(options))
+        idx = self._pick_choice_index(len(options))
         chosen = options[idx]  # may be '' (empty branch)
         return s[:start] + chosen + s[end:]
 
@@ -246,7 +273,7 @@ class PromptExpander:
             # Missing file => drop token silently
             return s[:start] + "" + s[end:]
 
-        idx = _stable_pick_index(self.seed, f"wild:{token}:{s}:{start}-{end}", len(options))
+        idx = self._pick_wild_index(token, len(options))
         chosen = options[idx] if 0 <= idx < len(options) else ""
 
         if phase == "pos":
@@ -269,6 +296,8 @@ class PromptExpander:
     def expand_prompt(self, text: str, phase: str = "pos") -> str:
         if not text:
             return ""
+        # Reset counters so fixed text doesn't affect picks; reproducible per call
+        self._reset_counters()
         out = text
         # 1) Collapse braces first (enables optional segments via empty branches)
         out = self._expand_choices_recursively(out)

@@ -4,7 +4,6 @@ from typing import List
 from .dynprompt.expander import (
     PromptExpander,
     WILDCARD_TOKEN_RE,
-    _stable_pick_index,  # reuse same salt/index math as the expander
 )
 
 # -------------------- Small helpers --------------------
@@ -28,26 +27,26 @@ def _merge_csv(*parts: str) -> str:
                 out.append(chunk)
     return ", ".join(out)
 
-def _collect_mirrors_deep(text: str, expander: PromptExpander) -> str:
+def _collect_mirrors_deep(text: str, base_expander: PromptExpander) -> str:
     """
-    Deep mirroring pass:
-      - Simulate the expander's left-to-right wildcard pass on the POSITIVE prompt.
-      - For tokens ending with '-mir', compute the chosen index and collect
-        "all except chosen" into a bag. (STRICT lookup: '<name>-mir.txt' only.)
-      - For non-mir tokens, just replace with the chosen option (no collection).
-    Notes:
-      * We collapse braces BEFORE scanning for wildcards to match the expander's order.
-      * Empty branches in -mir files are supported:
-          - If chosen == '' (empty), we add all NON-empty others to Negative.
-          - If chosen is non-empty, we add all other NON-empty options.
-      * Newly introduced nested wildcards (from chosen options) are handled
-        by continuing the while-loop until no __token__ remains.
+    Deep mirroring pass with counter-based RNG:
+      - Use a fresh expander (same seed/wildcard_dir/variety) so counters start at 0.
+      - Collapse braces first (consumes choice counter).
+      - Expand wildcards left-to-right; for any token ending with '-mir', add
+        "all except chosen" (ignore empties) to the bag.
+      - Replace tokens with their chosen values to permit nested discovery.
     """
-    # Step 1: match expander's first phase (choices first)
-    s = expander.collapse_choices(text or "")
+    mirror = PromptExpander(
+        seed=base_expander.seed,
+        wildcard_dir=base_expander.wildcard_dir,
+        variety=getattr(base_expander, "variety", 0),
+    )
+
+    # choices first (consumes mirror's choice counter)
+    s = mirror.collapse_choices(text or "")
     bag: List[str] = []
 
-    # Step 2: left-to-right wildcard pass (mirrors expander._expand_wildcards_recursively)
+    # wildcard pass (consumes mirror's wild counter in the same sequence as Positive)
     while True:
         m = WILDCARD_TOKEN_RE.search(s)
         if not m:
@@ -56,16 +55,15 @@ def _collect_mirrors_deep(text: str, expander: PromptExpander) -> str:
         token = m.group(1)
         start, end = m.span()
 
-        opts = expander.read_options_for_token(token)  # STRICT; may be empty
+        opts = mirror.read_options_for_token(token)
         if not opts:
-            # Drop unknown token to mirror main expander behavior
+            # drop unknown to mirror main expander behavior
             s = s[:start] + s[end:]
             continue
 
-        idx = _stable_pick_index(expander.seed, f"wild:{token}:{s}:{start}-{end}", len(opts))
+        idx = mirror._pick_wild_index(token, len(opts))
         chosen = opts[idx] if 0 <= idx < len(opts) else ""
 
-        # If this is a strict '-mir' token, accumulate "all except chosen" (ignore empties)
         if token.endswith("-mir"):
             others = [o for i, o in enumerate(opts) if i != idx and o.strip()]
             if others:
@@ -87,6 +85,10 @@ class DynPromptExpand:
         appends deep-mirrored exclusions from ANY __*-mir__ encountered in the
         Positive (including those nested inside wildcard files). Strict '-mir':
         only '<name>-mir.txt' is consulted; no fallback to '<name>.txt'.
+
+    Counter-based RNG means fixed tokens don't influence randomness; only
+    decision points (braces/wildcards) advance the counters. Optional 'variety'
+    input gives multiple reproducible randomness lanes per seed.
     """
 
     @classmethod
@@ -96,6 +98,8 @@ class DynPromptExpand:
                 "text": ("STRING", {"multiline": True, "default": ""}),
                 "negative": ("STRING", {"multiline": True, "default": ""}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 2**31 - 1}),
+                "variety": ("INT", {"default": 0, "min": 0, "max": 100,
+                                    "tooltip": "Extra randomness lane. 0 = off; same seed+variety reproduce."}),
                 "wildcard_dir": ("STRING", {
                     "default": "",
                     "tooltip": "Folder with wildcard .txt files (supports subfolders like clothes/tops.txt)"
@@ -112,7 +116,7 @@ class DynPromptExpand:
     FUNCTION = "expand"
     CATEGORY = "prompt"
 
-    def expand(self, text: str, negative: str, seed: int, wildcard_dir: str, auto_neg_from_mir: bool):
+    def expand(self, text: str, negative: str, seed: int, variety: int, wildcard_dir: str, auto_neg_from_mir: bool):
         # Resolve wildcard dir (absolute, ~ supported). Fallback to ./wildcards next to this file.
         wd = (wildcard_dir or "").strip()
         if wd:
@@ -120,7 +124,7 @@ class DynPromptExpand:
         if not wd:
             wd = os.path.abspath(os.path.join(os.path.dirname(__file__), "wildcards"))
 
-        expander = PromptExpander(seed=seed, wildcard_dir=wd)
+        expander = PromptExpander(seed=seed, wildcard_dir=wd, variety=variety)
 
         # A) Positive prompt: full expansion (choices -> wildcards -> choices)
         pos_final = expander.expand_prompt(text or "", phase="pos")
