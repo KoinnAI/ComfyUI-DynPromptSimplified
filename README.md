@@ -29,7 +29,7 @@ A minimal **dynamic prompting + mirrored wildcards** node for ComfyUI.
 Wire the outputs into your usual `CLIP Text Encode` node <br>
 You can preview what the output is with the "preview any" node in utils
 <br>
-![Preview 1](images/1.png)
+ <img src="https://raw.githubusercontent.com/RegulusAlpha/ComfyUI-DynPromptSimplified/refs/heads/main/images/1.png" alt="Preview 1" width="800"/>
 <br>
 ## ✨ Features
 
@@ -101,7 +101,7 @@ Usage:
 <br>
 - add node from: add node -> prompt -> DSynPrompt Expand (deep-mirrored)
 <br>
-![Preview 2](images/2.png)
+ <img src="https://raw.githubusercontent.com/RegulusAlpha/ComfyUI-DynPromptSimplified/refs/heads/main/images/2.png" alt="Preview 1" width="500"/>
 <br>
 
 Behavior:
