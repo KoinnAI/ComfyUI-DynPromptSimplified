@@ -28,7 +28,9 @@ A minimal **dynamic prompting + mirrored wildcards** node for ComfyUI.
 <br>
 Wire the outputs into your usual `CLIP Text Encode` node <br>
 You can preview what the output is with the "preview any" node in utils
-
+<br>
+![Preview 1](images/1.png)
+<br>
 ## ✨ Features
 
 - **Nested choices** with `{option1|option2|{nested1|nested2}}`
@@ -96,6 +98,11 @@ wildcards/hats-mir.txt
 Usage:
 - Positive: `portrait, __outfits__`
 - Negative: *(leave blank or put your usual negatives)*
+<br>
+- add node from: add node -> prompt -> DSynPrompt Expand (deep-mirrored)
+<br>
+![Preview 2](images/2.png)
+<br>
 
 Behavior:
 - The positive prompt expands `__outfits__` → which contains `__hats-mir__`.
