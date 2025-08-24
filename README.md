@@ -144,6 +144,82 @@ Positive: portrait, {cinematic|studio|outdoor}, __hats__, soft lighting
 Negative: lowres, bad anatomy, __hats-mir__
 ```
 
+## Logic
+
+**Determinism & Counters**
+- Randomness depends **only** on decision points:
+  - Each non-nested `{…}` is the next **choice#N**.
+  - Each `__token__` (including `__*-mir__`) is the next **wild#M**.
+- For each pick we hash `(seed, counter[, token], variety)` → index.
+- Fixed text (words/commas/spaces) does **not** affect counters or picks.
+- `variety` is an extra integer salt to create reproducible “lanes”.
+
+**Expansion Order (Positive)**
+1) **Braces-first pass** (repeat until none left)  
+   Collapse the left-most non-nested `{…}` using **choice#N**.
+2) **Wildcard pass** (left → right)  
+   Replace each `__token__` using **wild#M**:
+   - `__name__` → read `wildcards/name.txt` (supports subfolders like `a/b.txt`).
+   - `__name-mir__` → **strict** read `wildcards/name-mir.txt` only (no fallback).
+   - If a chosen line itself contains braces/wildcards, it’s injected and will be handled by subsequent passes.
+   - Missing file ⇒ token disappears (empty).
+3) **Braces-second pass**  
+   Collapse any `{…}` that arrived from wildcard lines.
+4) **Cleanup**  
+   Normalize commas/spaces.
+
+**Deep Mirroring (Negative complement)**
+- Your user Negative is expanded **normally** (same algorithm as Positive: braces → wildcards → braces).
+- If `auto_neg_from_mir` is **ON**, we run a **mirror pass** over the Positive prompt:
+  - Re-run the same brace + wildcard passes with the same `(seed, variety)` and counters.
+  - For every `__*-mir__` encountered (even if nested inside other wildcards):
+    - Compute the chosen option.
+    - Add **all non-empty alternatives except the chosen one** to a bag.
+    - Special case: if the chosen alternative is **empty** (from `{option|}`), add all **non-empty** options.
+- Merge: `final_negative = dedup(user_negative_expanded + mirrored_bag)`.
+
+**File Semantics**
+- **Single-line files**:
+  - Non-mir: if it’s `{a|b|{c|d}|}`, split by **top-level** `|` (empties kept as `""`).
+  - `*-mir`: if it’s `{a|b|{c|d}}`, **flatten** to leaf options `["a","b","c","d"]` so “all-except-chosen” is well-defined.
+- **Multi-line files**: each non-empty, non-comment line is an option (lines may contain braces/wildcards).
+- **Path safety**: allows subfolders (`a/b`), dotted names (`style.v1`); blocks traversal (`..`).
+
+**Pseudocode (conceptual)**
+```
+    counters = {choice: 0, wild: 0}
+
+    def pick_choice(options):
+        i = hash(seed, f"choice#{counters.choice}", variety) % len(options)
+        counters.choice += 1
+        return options[i]
+
+    def pick_wild(token, options):
+        i = hash(seed, f"wild#{counters.wild}:{token}", variety) % len(options)
+        counters.wild += 1
+        return options[i]
+
+    # Positive:
+    text = collapse_braces(text, pick_choice)        # pass 1
+    text = expand_wildcards(text, pick_wild)         # pass 2
+    text = collapse_braces(text, pick_choice)        # pass 3
+
+    # Negative:
+    neg  = collapse_braces(neg, pick_choice)
+    neg  = expand_wildcards(neg, pick_wild)
+    neg  = collapse_braces(neg, pick_choice)
+
+    # Deep mirror additions:
+    mirror_bag = run_positive_again_collecting_all_except_chosen_for('*-mir')
+
+    final_negative = dedup_join(neg, mirror_bag)
+```
+**Key Guarantees**
+- Same `(seed, variety, prompt, files)` ⇒ same Positive & Negative.
+- Adding/removing fixed text does **not** change picks.
+- Changing decision points (adding/removing a `{…}` or `__wildcard__`) changes the sequence of draws (by design).
+
+
 ## Notes
 - Missing wildcard files resolve to empty strings.
 - Choice/wildcard expansion is capped to prevent runaway recursion.
