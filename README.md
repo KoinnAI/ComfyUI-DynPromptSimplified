@@ -128,7 +128,7 @@ Behavior:
 **Example**
 ```text
 Prompt: __color__, {A|B|{C|D}}, __pose-mir__
-
+```
 (seed=123, variety=0) → picks one set of branches
 (seed=123, variety=1) → different set of branches (still reproducible)
 
@@ -151,6 +151,7 @@ Negative: lowres, bad anatomy, __hats-mir__
   and auto-builds a mirrored negative when possible.
 
 ## Changelog
+
 ### 2025-08-24 — Counter-Based Randomness & “Variety” lanes
 **Why**: fixed tokens could cause prompt to converge.
 
@@ -177,5 +178,5 @@ Prompt: __color__, {A|B|{C|D}}, __pose-mir__
 Same seed, same variety → same picks (pos & neg)
 Change only fixed words → picks stay identical
 Bump variety (e.g., 0→1) → different, reproducible picks
-
+```
 License: GPLv3 (same as the original)
