@@ -28,7 +28,7 @@ Documentation = "https://github.com/KoinnAI/ComfyUI-DynPromptSimplified/wiki"
 "Bug Tracker" = "https://github.com/KoinnAI/ComfyUI-DynPromptSimplified/issues"
 
 [tool.comfy]
-PublisherId = ""
+PublisherId = "koinai"
 DisplayName = "ComfyUI-DynPromptSimplified"
 Icon = ""
 includes = [] 
